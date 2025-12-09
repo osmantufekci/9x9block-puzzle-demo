@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>9x9 Puzzle: Hint Master</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        /* ÜST PANEL */
+        #top-bar {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 10px;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        h2 { margin: 5px; color: #eee; font-size: 1.4rem; }
+        
+        #status {
+            font-size: 14px;
+            color: #aaa;
+            height: 20px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        #controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .btn {
+            background: #333;
+            color: #ccc;
+            border: 1px solid #555;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn:active { transform: scale(0.95); }
+
+        .btn.active {
+            background: #448AFF;
+            color: white;
+            border-color: #448AFF;
+            box-shadow: 0 0 10px rgba(68, 138, 255, 0.4);
+        }
+
+        /* FONKSİYON BUTONLARI */
+        .action-btn {
+            font-weight: bold;
+            border: none;
+        }
+        
+        #undo-btn { background-color: #ff5252; color: white; }
+        #undo-btn:disabled { background-color: #4a2a2a; color: #888; opacity: 0.6; }
+
+        #hint-btn { background-color: #ffd740; color: #333; }
+        #hint-btn:disabled { background-color: #4a452a; color: #888; opacity: 0.6; }
+
+        /* OYUN ALANI */
+        #game-board {
+            display: grid;
+            width: 90vw;
+            height: 90vw;
+            max-width: 400px;
+            max-height: 400px;
+            grid-template-columns: repeat(9, 1fr); 
+            grid-template-rows: repeat(9, 1fr);
+            gap: 2px;
+            background-color: #222;
+            padding: 5px;
+            border-radius: 8px;
+            border: 2px solid #444;
+            position: relative;
+        }
+
+        .cell {
+            background-color: #2a2a2a;
+            border-radius: 3px;
+            width: 100%;
+            height: 100%;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+        
+        /* Renk Sınıfları */
+        .filled {
+            border: 1px solid rgba(255,255,255,0.3);
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        /* KİLİTLİ / İPUCU İLE KONMUŞ HÜCRE */
+        .cell.locked {
+            /* Üzerinde kilit deseni veya hafif koyuluk */
+            filter: brightness(0.8) contrast(1.2);
+            border-color: #ffffffaa;
+            z-index: 1; /* Altta kalsın */
+        }
+        .cell.locked::after {
+            content: '';
+            display: block;
+            width: 100%; height: 100%;
+            background-image: radial-gradient(circle, rgba(255,255,255,0.2) 2px, transparent 2.5px);
+            background-size: 8px 8px;
+        }
+
+        /* BAŞLANGIÇ İPUCU (PRE-FILLED) */
+        .cell.prefill {
+            background-color: #3e3e3e !important;
+            border: 1px solid #555;
+            background-image: linear-gradient(45deg, #444 25%, transparent 25%, transparent 50%, #444 50%, #444 75%, transparent 75%, transparent);
+            background-size: 8px 8px;
+        }
+
+        .cell.preview {
+            background-color: rgba(255, 255, 255, 0.5) !important;
+            box-shadow: 0 0 10px white;
+            border: 1px solid white;
+            z-index: 10;
+            transform: scale(1.1);
+        }
+
+        /* PARÇA TEPSİSİ */
+        #pieces-tray {
+            margin-top: 20px;
+            width: 95%;
+            height: 120px;
+            background-color: #1e1e1e;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            gap: 20px;
+            overflow-x: auto;
+            box-shadow: inset 0 0 10px #000;
+        }
+
+        .piece-preview {
+            display: grid;
+            gap: 1px;
+            padding: 15px; 
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+            touch-action: none;
+            flex-shrink: 0; 
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        .piece-cell { border-radius: 2px; }
+
+        .dragging {
+            position: fixed;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0.9;
+            transform: scale(1.1);
+            filter: drop-shadow(0 20px 40px rgba(0,0,0,0.6));
+        }
+
+        /* Renk Paleti */
+        .c-0 { background-color: #FF5252; }
+        .c-1 { background-color: #448AFF; }
+        .c-2 { background-color: #69F0AE; }
+        .c-3 { background-color: #E040FB; }
+        .c-4 { background-color: #FFD740; }
+        .c-5 { background-color: #FF6E40; }
+
+    </style>
+</head>
+<body>
+
+    <div id="top-bar">
+        <h2>9x9 Puzzle</h2>
+        <div id="status">Seviye seç ve başla!</div>
+        
+        <div id="controls">
+            <button class="btn" onclick="setDifficulty('easy', this)">Kolay</button>
+            <button class="btn active" onclick="setDifficulty('medium', this)">Orta</button>
+            <button class="btn" onclick="setDifficulty('hard', this)">Zor</button>
+            
+            <button id="undo-btn" class="btn action-btn" onclick="undoMove()">↺ (3)</button>
+            <button id="hint-btn" class="btn action-btn" onclick="useHint()">💡 İpucu (3)</button>
+        </div>
+    </div>
+
+    <div id="game-board"></div>
+    <div id="pieces-tray"></div>
+
+    <script>
+        const GRID_SIZE = 9;
+        let cellPixelSize = 0; 
+        
+        // Board State: 
+        // 0: Boş
+        // 1: Başlangıç Dolusu (Pre-fill)
+        // String ("c-0"): Parça Rengi
+        // "LOCKED": İpucu ile konulmuş
+        let boardState = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+        const COLORS = ['c-0', 'c-1', 'c-2', 'c-3', 'c-4', 'c-5'];
+        
+        // Ayarlar
+        let currentDiff = 'medium';
+        const DIFFICULTY = {
+            'easy':   { min: 25, max: 35 },
+            'medium': { min: 12, max: 20 },
+            'hard':   { min: 4,  max: 8  }
+        };
+
+        let undoCount = 3;
+        let hintCount = 3;
+        let moveHistory = []; 
+
+        const gameBoard = document.getElementById('game-board');
+        const tray = document.getElementById('pieces-tray');
+        const statusDiv = document.getElementById('status');
+        const undoBtn = document.getElementById('undo-btn');
+        const hintBtn = document.getElementById('hint-btn');
+
+        function initGame() {
+            renderBoard();
+            setTimeout(() => {
+                updateCellSize();
+                generateLevel();
+            }, 100);
+        }
+
+        function setDifficulty(level, btn) {
+            currentDiff = level;
+            document.querySelectorAll('.btn').forEach(b => {
+                if(!b.classList.contains('action-btn')) b.classList.remove('active');
+            });
+            btn.classList.add('active');
+            generateLevel();
+        }
+
+        function updateCellSize() {
+            const firstCell = document.querySelector('.cell');
+            if(firstCell) {
+                cellPixelSize = firstCell.getBoundingClientRect().width;
+                if(cellPixelSize === 0) cellPixelSize = 35; 
+            }
+        }
+        window.onresize = () => updateCellSize();
+
+        function renderBoard() {
+            gameBoard.innerHTML = '';
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    
+                    const val = boardState[y][x];
+                    if (val === 1) cell.classList.add('prefill');
+                    else if (typeof val === 'string') {
+                        // Eğer renk kodu varsa (örn: 'c-0')
+                        // Eğer 'LOCKED' flagı varsa (bunu ayrı bir matriste tutmak daha temiz ama string parse da olur)
+                        if(val.includes('_LOCKED')) {
+                             const color = val.split('_')[0];
+                             cell.classList.add('filled', color, 'locked');
+                        } else {
+                             cell.classList.add('filled', val);
+                        }
+                    }
+                    gameBoard.appendChild(cell);
+                }
+            }
+        }
+
+        function generateLevel() {
+            // Reset
+            undoCount = 3; 
+            hintCount = 3;
+            moveHistory = [];
+            updateButtons();
+            statusDiv.innerText = "Parçaları yerleştir.";
+            statusDiv.style.color = "#aaa";
+            
+            boardState = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+            let virtualGrid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(1)); // 1: Kesilebilir
+            let remaining = GRID_SIZE * GRID_SIZE;
+            tray.innerHTML = '';
+
+            // 1. Başlangıç Dolularını (Pre-fills) Yerleştir
+            const range = DIFFICULTY[currentDiff];
+            let prefillCount = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
+
+            while(prefillCount > 0 && remaining > 0) {
+                let hx = Math.floor(Math.random() * GRID_SIZE);
+                let hy = Math.floor(Math.random() * GRID_SIZE);
+
+                if(boardState[hy][hx] === 0) {
+                    boardState[hy][hx] = 1; // 1 = Prefill
+                    virtualGrid[hy][hx] = 0; // Kesilemez
+                    remaining--;
+                    prefillCount--;
+                }
+            }
+            renderBoard();
+
+            // 2. Parçaları Kes ve Tepsiye Koy
+            let failSafe = 0;
+            while(remaining > 0 && failSafe < 1000) {
+                failSafe++;
+                let sx, sy, attempts = 0;
+                do {
+                    sx = Math.floor(Math.random() * GRID_SIZE);
+                    sy = Math.floor(Math.random() * GRID_SIZE);
+                    attempts++;
+                } while (virtualGrid[sy][sx] === 0 && attempts < 100);
+
+                if(attempts >= 100) break; 
+
+                let size = Math.min(remaining, Math.floor(Math.random() * 5) + 2); 
+                let shapeData = growRegion(virtualGrid, sx, sy, size);
+                
+                if (shapeData && shapeData.matrix.length > 0) {
+                    createPieceForTray(shapeData);
+                    let count = 0;
+                    shapeData.matrix.forEach(r => r.forEach(v => { if(v) count++; }));
+                    remaining -= count;
+                }
+            }
+        }
+
+        // --- İPUCU (HINT) SİSTEMİ ---
+        function useHint() {
+            if(hintCount <= 0) return;
+
+            // Tepsideki tüm parçaları tara
+            const pieces = Array.from(tray.children);
+            if(pieces.length === 0) return;
+
+            let bestPiece = null;
+            let bestShape = null;
+
+            // Tepsideki parçalardan, tahtada yeri BOŞ olan birini bul
+            for (let p of pieces) {
+                const shape = p.shapeData; // createPieceForTray'de kaydetmiştik
+                if (canPlacePerfectly(shape)) {
+                    bestPiece = p;
+                    bestShape = shape;
+                    break;
+                }
+            }
+
+            if (bestPiece) {
+                // Parçayı otomatik yerleştir
+                placeShape(bestShape.targetX, bestShape.targetY, bestShape, true); // true = locked
+                
+                // Tepsiden sil
+                bestPiece.style.transform = "scale(0) rotate(360deg)";
+                bestPiece.style.opacity = "0";
+                setTimeout(() => bestPiece.remove(), 300);
+
+                // Hakkı düş
+                hintCount--;
+                updateButtons();
+                checkWin();
+                
+                statusDiv.innerText = "İpucu kullanıldı!";
+                statusDiv.style.color = "#ffd740";
+            } else {
+                // Eğer uygun parça yoksa (Kullanıcı yanlış parça koyup yerleri tıkamışsa)
+                statusDiv.innerText = "Yer yok! Önce yanlış parçaları kaldır.";
+                statusDiv.style.color = "#ff5252";
+                shakeBoard();
+            }
+        }
+
+        // İpucu için: Parçanın ait olduğu yer şu an boş mu?
+        function canPlacePerfectly(shape) {
+            // growRegion fonksiyonunda kaydettiğimiz orijinal koordinatlar
+            const tx = shape.targetX; 
+            const ty = shape.targetY;
+            
+            const rows = shape.matrix.length;
+            const cols = shape.matrix[0].length;
+
+            for(let y=0; y<rows; y++) {
+                for(let x=0; x<cols; x++) {
+                    if(shape.matrix[y][x] === 1) {
+                        // Hedef koordinat
+                        let boardY = ty + y;
+                        let boardX = tx + x;
+                        // Tahta doluysa (0 değilse) bu parça oraya konamaz
+                        if(boardState[boardY][boardX] !== 0) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function shakeBoard() {
+            gameBoard.style.transform = "translateX(5px)";
+            setTimeout(() => gameBoard.style.transform = "translateX(-5px)", 50);
+            setTimeout(() => gameBoard.style.transform = "translateX(5px)", 100);
+            setTimeout(() => gameBoard.style.transform = "translateX(0)", 150);
+        }
+
+        // --- GERİ ALMA ---
+        function undoMove() {
+            if (undoCount > 0 && moveHistory.length > 0) {
+                const lastMove = moveHistory.pop();
+                
+                // Board geri yükle
+                boardState = JSON.parse(JSON.stringify(lastMove.boardState));
+                renderBoard();
+
+                // Parçayı tepsiye geri koy
+                createPieceForTray(lastMove.pieceShape);
+
+                undoCount--;
+                updateButtons();
+                statusDiv.innerText = "Hamle geri alındı.";
+                statusDiv.style.color = "#aaa";
+            }
+        }
+
+        function updateButtons() {
+            undoBtn.innerText = `↺ (${undoCount})`;
+            undoBtn.disabled = (undoCount === 0 || moveHistory.length === 0);
+
+            hintBtn.innerText = `💡 İpucu (${hintCount})`;
+            hintBtn.disabled = (hintCount === 0);
+        }
+
+        // --- OYUN MOTORU GÜNCELLEMELERİ ---
+        
+        // Önemli: growRegion artık hedef koordinatları da döndürüyor
+        function growRegion(vGrid, sx, sy, targetSize) {
+            let region = [{x: sx, y: sy}];
+            vGrid[sy][sx] = 0; 
+            let i = 0;
+            while(region.length < targetSize && i < region.length) {
+                let current = region[i];
+                let dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+                dirs.sort(() => Math.random() - 0.5);
+                for(let d of dirs) {
+                    if(region.length >= targetSize) break;
+                    let nx = current.x + d[1];
+                    let ny = current.y + d[0];
+                    if(nx>=0 && nx<GRID_SIZE && ny>=0 && ny<GRID_SIZE && vGrid[ny][nx]===1) {
+                        vGrid[ny][nx] = 0;
+                        region.push({x: nx, y: ny});
+                    }
+                }
+                i++;
+            }
+            
+            let minX = Math.min(...region.map(c => c.x));
+            let minY = Math.min(...region.map(c => c.y));
+            let width = Math.max(...region.map(c => c.x)) - minX + 1;
+            let height = Math.max(...region.map(c => c.y)) - minY + 1;
+            let matrix = Array(height).fill().map(() => Array(width).fill(0));
+            region.forEach(c => matrix[c.y - minY][c.x - minX] = 1);
+
+            return { 
+                matrix, 
+                color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                targetX: minX, // Parçanın ait olduğu orijinal X
+                targetY: minY  // Parçanın ait olduğu orijinal Y
+            };
+        }
+
+        function createPieceForTray(shape) {
+            const container = document.createElement('div');
+            container.classList.add('piece-preview');
+            // Veriyi elemente gömüyoruz (İpucu ve Geri Alma için kritik)
+            container.shapeData = shape; 
+            
+            let previewSize = Math.max(15, cellPixelSize * 0.6); 
+            container.style.gridTemplateColumns = `repeat(${shape.matrix[0].length}, ${previewSize}px)`;
+
+            shape.matrix.forEach(row => {
+                row.forEach(val => {
+                    const c = document.createElement('div');
+                    if (val) {
+                        c.classList.add('piece-cell', shape.color);
+                        c.style.width = `${previewSize}px`; c.style.height = `${previewSize}px`;
+                    } else { 
+                        c.style.width = `${previewSize}px`; c.style.height = `${previewSize}px`; 
+                    }
+                    container.appendChild(c);
+                });
+            });
+
+            container.addEventListener('mousedown', (e) => startDrag(e, container, shape));
+            container.addEventListener('touchstart', (e) => startDrag(e, container, shape), {passive: false});
+            tray.appendChild(container);
+        }
+
+        let dragEl = null;
+        let activeShape = null;
+        const TOUCH_OFFSET_Y = 90; 
+
+        function startDrag(e, original, shape) {
+            if(e.cancelable && e.type === 'touchmove') e.preventDefault(); 
+            
+            let clientX = e.clientX || e.touches[0].clientX;
+            let clientY = e.clientY || e.touches[0].clientY;
+
+            activeShape = shape;
+            original.style.opacity = '0.3';
+
+            dragEl = original.cloneNode(true);
+            dragEl.classList.add('dragging');
+            const cols = shape.matrix[0].length;
+            dragEl.style.gridTemplateColumns = `repeat(${cols}, ${cellPixelSize}px)`;
+            
+            Array.from(dragEl.children).forEach(c => {
+                c.style.width = `${cellPixelSize}px`; c.style.height = `${cellPixelSize}px`;
+            });
+
+            document.body.appendChild(dragEl);
+            moveAt(clientX, clientY);
+
+            function moveAt(x, y) {
+                dragEl.style.left = (x - (dragEl.offsetWidth / 2)) + 'px';
+                dragEl.style.top = (y - (dragEl.offsetHeight / 2) - TOUCH_OFFSET_Y) + 'px';
+            }
+
+            let lastBestCoords = null;
+            function onMove(ev) {
+                ev.preventDefault();
+                let cx = ev.clientX || ev.touches[0].clientX;
+                let cy = ev.clientY || ev.touches[0].clientY;
+                moveAt(cx, cy);
+
+                const rect = dragEl.getBoundingClientRect();
+                lastBestCoords = findBestPlacement(rect.left + rect.width/2, rect.top + rect.height/2, activeShape);
+                if (lastBestCoords) showPreview(lastBestCoords.x, lastBestCoords.y, activeShape);
+                else clearPreview();
+            }
+
+            function onEnd(ev) {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onEnd);
+                document.removeEventListener('touchmove', onMove);
+                document.removeEventListener('touchend', onEnd);
+                clearPreview();
+                
+                if (lastBestCoords) {
+                    // Hamle Kaydet
+                    moveHistory.push({
+                        boardState: JSON.parse(JSON.stringify(boardState)), // Kopya al
+                        pieceShape: activeShape
+                    });
+                    updateButtons(); // Geri al butonu aktifleşsin
+
+                    placeShape(lastBestCoords.x, lastBestCoords.y, activeShape, false);
+                    original.remove();
+                    checkWin();
+                } else {
+                    original.style.opacity = '1';
+                }
+                if(dragEl) dragEl.remove();
+            }
+
+            document.addEventListener('mousemove', onMove, {passive: false});
+            document.addEventListener('mouseup', onEnd);
+            document.addEventListener('touchmove', onMove, {passive: false});
+            document.addEventListener('touchend', onEnd);
+        }
+
+        function placeShape(gx, gy, shape, isLocked) {
+            const startX = gx - Math.floor(shape.matrix[0].length / 2); // Merkezleme hesabı farklı olabilir, burası drag mantığına göre
+            // Ancak İpucu için startX direkt gx (targetX) olarak gelmeli.
+            // Drag sistemindeki gx merkezdir. İpucu sistemindeki gx sol-üst köşedir.
+            // Bu uyumsuzluğu çözmek için: placeShape her zaman "Sol Üst Köşe" (startX, startY) kabul etsin.
+            
+            // Eğer drag'den geliyorsa (merkez hesabı yapılmışsa) gx, gy zaten sol üste dönüştürülmüş olmalı dışarıda.
+            // Ama findBestPlacement bize SOL ÜST (startX) dönmüyor, merkez gx dönüyor.
+            // Düzeltme:
+            // findBestPlacement return değeri "Merkez Grid Koordinatı".
+            // placeShape bunu sol üste çevirmeli.
+            // FAKAT useHint direkt sol üst gönderiyor (targetX).
+            
+            // ÇÖZÜM: useHint çağırırken shape merkezini hesaplayıp gönderelim ya da
+            // placeShape fonksiyonunu "Sol Üst" kabul edecek şekilde sabitleyelim.
+            // Drag bitişinde de sol üstü hesaplayıp yollayalım.
+
+            // 1. Drag bitişinde (onEnd) lastBestCoords zaten TARGET GX (Sol Üst mü? Hayır, şu anki findBestPlacement hedef merkez dönüyor).
+            // Kodun tutarlılığı için: placeShape SOL ÜST (startX, startY) alsın.
+            
+            // Drag'den gelen çağrı için dönüştürme:
+            // findBestPlacement, placeShape ile uyumlu olsun diye "bestCandidate"i sol üst olarak döndürmeli.
+            // Aşağıda findBestPlacement'ı güncelledim.
+            
+            shape.matrix.forEach((row, y) => {
+                row.forEach((val, x) => {
+                    if(val) {
+                        let finalVal = shape.color;
+                        if(isLocked) finalVal += "_LOCKED";
+                        boardState[gy+y][gx+x] = finalVal;
+                        
+                        const cell = document.querySelector(`.cell[data-x="${gx+x}"][data-y="${gy+y}"]`);
+                        if(cell) {
+                            if(isLocked) {
+                                cell.className = `cell filled locked ${shape.color}`;
+                            } else {
+                                cell.className = `cell filled ${shape.color}`;
+                            }
+                            cell.style.transform = "scale(0.5)";
+                            setTimeout(() => cell.style.transform = "scale(1)", 150);
+                        }
+                    }
+                });
+            });
+        }
+
+        // --- YARDIMCI HESAPLAMALAR ---
+        function findBestPlacement(pixelX, pixelY, shape) {
+            const boardRect = gameBoard.getBoundingClientRect();
+            const relX = pixelX - boardRect.left;
+            const relY = pixelY - boardRect.top;
+            
+            // Mouse'un olduğu grid merkezi
+            const centerGx = Math.round((relX / cellPixelSize) - 0.5);
+            const centerGy = Math.round((relY / cellPixelSize) - 0.5);
+
+            // Şeklin boyutları
+            const rows = shape.matrix.length;
+            const cols = shape.matrix[0].length;
+            
+            // Şeklin merkez ofseti (Drag yaparken şekli ortasından tutuyoruz)
+            const offsetX = Math.floor(cols / 2);
+            const offsetY = Math.floor(rows / 2);
+
+            let bestSolUstX = -1;
+            let bestSolUstY = -1;
+            let minDistance = Infinity;
+
+            // Yakın çevreyi tara
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    // Aday Merkez
+                    let candidateCenterX = centerGx + dx;
+                    let candidateCenterY = centerGy + dy;
+                    
+                    // Aday Sol Üst (PlaceShape burayı ister)
+                    let candidateStartX = candidateCenterX - offsetX;
+                    let candidateStartY = candidateCenterY - offsetY;
+
+                    if (isValid(candidateStartX, candidateStartY, shape)) {
+                        // Mesafeye bak
+                        const dist = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                            bestSolUstX = candidateStartX;
+                            bestSolUstY = candidateStartY;
+                        }
+                    }
+                }
+            }
+
+            if (bestSolUstX !== -1) return { x: bestSolUstX, y: bestSolUstY };
+            return null;
+        }
+
+        function isValid(sx, sy, shape) {
+            const rows = shape.matrix.length;
+            const cols = shape.matrix[0].length;
+            for(let y=0; y<rows; y++) {
+                for(let x=0; x<cols; x++) {
+                    if(shape.matrix[y][x] === 1) {
+                        let tx = sx + x;
+                        let ty = sy + y;
+                        if(tx < 0 || tx >= GRID_SIZE || ty < 0 || ty >= GRID_SIZE) return false;
+                        if(boardState[ty][tx] !== 0) return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function showPreview(sx, sy, shape) {
+            clearPreview();
+            shape.matrix.forEach((row, y) => {
+                row.forEach((val, x) => {
+                    if(val) {
+                        const cell = document.querySelector(`.cell[data-x="${sx+x}"][data-y="${sy+y}"]`);
+                        if(cell) cell.classList.add('preview');
+                    }
+                });
+            });
+        }
+        function clearPreview() {
+            document.querySelectorAll('.cell.preview').forEach(el => el.classList.remove('preview'));
+        }
+
+        // --- KONFETİ EFEKTİ ---
+        function checkWin() {
+            // Sadece pre-fill (1) veya renkli string olanlar dolu sayılır
+            const isFull = boardState.every(row => row.every(v => v !== 0));
+            
+            if(isFull) {
+                statusDiv.innerHTML = "<span style='color:#69F0AE; font-weight:bold; font-size:18px'>🏆 TEBRİKLER!</span>";
+                undoBtn.disabled = true;
+                hintBtn.disabled = true;
+                triggerConfetti();
+            }
+        }
+
+        function triggerConfetti() {
+            const duration = 3000; 
+            const end = Date.now() + duration;
+            const canvas = document.createElement('canvas');
+            canvas.style.position = 'fixed'; canvas.style.top = '0'; canvas.style.left = '0';
+            canvas.style.width = '100%'; canvas.style.height = '100%';
+            canvas.style.pointerEvents = 'none'; canvas.style.zIndex = '9999';
+            document.body.appendChild(canvas);
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            
+            const colors = ['#ff5252', '#448aff', '#69f0ae', '#e040fb', '#ffd740'];
+            const particles = Array.from({length: 150}, () => ({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height - canvas.height,
+                w: Math.random() * 10 + 5, h: Math.random() * 10 + 5,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                vy: Math.random() * 3 + 2, vx: Math.random() * 2 - 1,
+                rot: Math.random() * 360, rotSpeed: Math.random() * 10 - 5
+            }));
+
+            function frame() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                let active = 0;
+                particles.forEach(p => {
+                    p.y += p.vy; p.x += p.vx; p.rot += p.rotSpeed;
+                    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot * Math.PI/180);
+                    ctx.fillStyle = p.color; ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+                    ctx.restore();
+                    if (p.y < canvas.height) active++;
+                });
+                if (Date.now() < end || active > 0) requestAnimationFrame(frame);
+                else canvas.remove();
+            }
+            frame();
+        }
+
+        initGame();
+
+    </script>
+</body>
+</html>
